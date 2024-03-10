@@ -8,6 +8,7 @@ Inspired by https://github.com/mlocati/docker-php-extension-installer
 
 - Blackfire
 - Tideways
+- Relay
 
 ## Installation
 

@@ -26,6 +26,10 @@ if ! which curl 1> /dev/null 2> /dev/null; then
     apk add --no-cache curl
 fi
 
+currentDir=$(pwd)
+
+requiredWolfiPackages=""
+
 while :; do
     if test $# -lt 1; then
         break
@@ -36,7 +40,6 @@ while :; do
             if [ -e "$phpConfDir/blackfire.ini" ]; then
                 echo "blackfire already installed, skipping";
             else
-                before=$(pwd)
                 tmpDir=$(mktemp -d)
                 cd "$tmpDir"
                 curl -sSLf --user-agent Docker "https://blackfire.io/api/v1/releases/probe/php/linux/$arch/$phpVersion" | tar xz
@@ -44,7 +47,7 @@ while :; do
         
                 echo "extension=blackfire.so" > "$phpConfDir/blackfire.ini"
                 echo "blackfire.agent_socket=tcp://blackfire:8307" >> "$phpConfDir/blackfire.ini"
-                cd "$before"
+                cd "$currentDir"
                 rm -rf "$tmpDir"
                 echo "Installed blackfire"
             fi
@@ -53,7 +56,6 @@ while :; do
             if [ -e "$phpConfDir/tideways.ini" ]; then
                     echo "tideways already installed, skipping";
             else
-                before=$(pwd)
                 tidewaysArch=$arch
 
                 if [ $tidewaysArch == "amd64" ]; then
@@ -77,9 +79,46 @@ while :; do
                 mv "tideways-php-$phpVersionDot.so" "$phpModuleDir/tideways.so"
                 echo "extension=tideways.so" > "$phpConfDir/tideways.ini"
 
-                cd "$before"
+                cd "$currentDir"
                 rm -rf "$tmpDir"
                 echo "Installed tideways"
+            fi
+            ;;
+        relay)
+            if [ -e "$phpConfDir/relay.ini" ]; then
+                echo "relay already installed, skipping";
+            else
+                extVersion="$(curl -sSLf https://builds.r2.relay.so/meta/latest)"
+                extVersion="${extVersion#v}"
+
+                relayArch=$arch
+
+                if [ $relayArch == "amd64" ]; then
+                    relayArch="x86-64"
+                else
+                    relayArch="aarch64"
+                fi
+
+                url="https://builds.r2.relay.so/v${extVersion}/relay-v${extVersion}-php${phpVersionDot}-debian-${relayArch}+libssl3.tar.gz"
+
+                tmpDir=$(mktemp -d)
+                cd "$tmpDir"
+                
+                curl -sSLf --user-agent Docker "$url" | tar xz
+
+                cd relay*
+                mv relay-pkg.so "$phpModuleDir/relay.so"
+
+                # same as https://github.com/mlocati/docker-php-extension-installer/blob/master/install-php-extensions#L3514
+                sed -i "s/00000000-0000-0000-0000-000000000000/$(cat /proc/sys/kernel/random/uuid)/" "$phpModuleDir/relay.so"
+                echo "extension=relay.so" > "$phpConfDir/relay.ini"
+                grep -vE '^[ \t]*extension[ \t]*=' relay.ini >> "$phpConfDir/relay.ini"
+
+                requiredWolfiPackages="$requiredWolfiPackages liblz4-1 libzstd1 php-${phpVersionDot}-msgpack php-${phpVersionDot}-igbinary"
+
+                rm -rf "$tmpDir"
+                cd "$currentDir"
+                echo "Installed relay ${extVersion}"
             fi
             ;;
         *)
@@ -88,5 +127,8 @@ while :; do
     esac
 
     shift
-
 done
+
+if [ "$requiredWolfiPackages" != "" ]; then
+    apk add --no-cache $requiredWolfiPackages
+fi
