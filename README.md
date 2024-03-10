@@ -9,6 +9,25 @@ Inspired by https://github.com/mlocati/docker-php-extension-installer
 - Blackfire
 - Tideways
 
+## Installation
+
+### Copy into Image
+
+```dockerfile
+ADD https://raw.githubusercontent.com/shyim/wolfi-php-extension-installer/main/install-wolfi-php-extensions /usr/bin/install-wolfi-php-extensions
+
+RUN sh /usr/bin/install-wolfi-php-extensions blackfire
+```
+
+### Execute directly
+
+```dockerfile
+RUN apk add --no-cache curl
+
+RUN curl -sSL https://raw.githubusercontent.com/shyim/wolfi-php-extension-installer/main/install-wolfi-php-extensions | sh -s blackfire
+```
+
+
 ## Usage
 
 ```bash
