@@ -1,0 +1,79 @@
+#!/usr/bin/env sh
+
+set -o errexit
+set -o nounset
+
+arch=""
+phpVersion=$(php -r 'echo PHP_MAJOR_VERSION . PHP_MINOR_VERSION;')
+phpVersionDot=$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')
+phpModuleDir="/usr/lib/php/modules/"
+phpConfDir="/etc/php/conf.d/"
+
+case $(uname -m) in
+    aarch64 | arm64 | armv8)
+        arch=arm64
+        ;;
+    *)
+        arch=amd64
+        ;;
+esac
+
+if ! which curl 1> /dev/null 2> /dev/null; then
+    apk add --no-cache curl
+fi
+
+case "$@" in 
+    blackfire)
+        if [ -e "$phpConfDir/blackfire.ini" ]; then
+            echo "blackfire already installed, skipping";
+        else
+            before=$(pwd)
+            tmpDir=$(mktemp -d)
+            cd "$tmpDir"
+            curl -sSLf --user-agent Docker "https://blackfire.io/api/v1/releases/probe/php/linux/$arch/$phpVersion" | tar xz
+            mv $tmpDir/blackfire*.so "$phpModuleDir/blackfire.so"
+    
+            echo "extension=blackfire.so" > "$phpConfDir/blackfire.ini"
+            echo "blackfire.agent_socket=tcp://blackfire:8307" >> "$phpConfDir/blackfire.ini"
+            cd "$before"
+            rm -rf "$tmpDir"
+            echo "Installed blackfire"
+        fi
+        ;;
+    tideways)
+        if [ -e "$phpConfDir/tideways.ini" ]; then
+                echo "tideways already installed, skipping";
+        else
+            before=$(pwd)
+            tidewaysArch=$arch
+
+            if [ $tidewaysArch == "amd64" ]; then
+                tidewaysArch="x86_64"
+            fi
+
+            url=$(curl -sSLf -o - https://tideways.com/profiler/downloads | grep -Eo "\"[^\"]+/tideways-php-([0-9]+\.[0-9]+\.[0-9]+)-$tidewaysArch.tar.gz\"" | cut -d'"' -f2)
+            
+            if [ $url == "" ]; then
+                echo "Could not gather download link from Tideways. Please open a Issue"
+                exit 1
+            fi
+
+            tmpDir=$(mktemp -d)
+            cd "$tmpDir"
+
+            curl -sSLf --user-agent Docker $url | tar xz
+
+            cd tideways*
+
+            mv "tideways-php-$phpVersionDot.so" "$phpModuleDir/tideways.so"
+            echo "extension=tideways.so" > "$phpConfDir/tideways.ini"
+
+            cd "$before"
+            rm -rf "$tmpDir"
+            echo "Installed tideways"
+        fi
+        ;;
+    *)
+        echo "Is unsupported right now. feel free to make a Issue"
+        ;;
+esac
